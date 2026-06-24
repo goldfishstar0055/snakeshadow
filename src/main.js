@@ -123,6 +123,8 @@ async function init() {
     layers: [snakeLayer, userLayer],
   });
 
+  const userCenter = new Point({ latitude: loc.lat, longitude: loc.lng });
+
   const view = new SceneView({
     container: "viewDiv",
     map,
@@ -140,6 +142,10 @@ async function init() {
       atmosphere: { quality: "high" },
     },
     popup: { defaultPopupTemplateEnabled: false },
+  });
+
+  view.when(() => {
+    view.goTo({ target: userCenter, tilt: 65, zoom: 17 }, { duration: 0 });
   });
 
   // Shadow status
@@ -171,11 +177,15 @@ async function init() {
 
   // Locate button
   document.getElementById("btn-locate").addEventListener("click", () => {
-    view.goTo({
-      position: { latitude: loc.lat - 0.001, longitude: loc.lng, z: 400 },
-      tilt: 65,
-      heading: 0,
-    }, { duration: 1000 });
+    view.goTo({ target: userCenter, tilt: 65, zoom: 17 }, { duration: 1000 });
+  });
+
+  // Zoom buttons
+  document.getElementById("btn-zoom-in").addEventListener("click", () => {
+    view.goTo({ zoom: view.zoom + 1 }, { duration: 300 });
+  });
+  document.getElementById("btn-zoom-out").addEventListener("click", () => {
+    view.goTo({ zoom: view.zoom - 1 }, { duration: 300 });
   });
 
   // Camera toggle
@@ -185,21 +195,13 @@ async function init() {
   btnTop.addEventListener("click", () => {
     btnTop.classList.add("active");
     btnAngle.classList.remove("active");
-    view.goTo({
-      position: { latitude: loc.lat, longitude: loc.lng, z: 800 },
-      tilt: 0,
-      heading: 0,
-    }, { duration: 800 });
+    view.goTo({ target: userCenter, tilt: 0, zoom: view.zoom }, { duration: 800 });
   });
 
   btnAngle.addEventListener("click", () => {
     btnAngle.classList.add("active");
     btnTop.classList.remove("active");
-    view.goTo({
-      position: { latitude: loc.lat - 0.003, longitude: loc.lng, z: 600 },
-      tilt: 65,
-      heading: 0,
-    }, { duration: 800 });
+    view.goTo({ target: userCenter, tilt: 65, zoom: view.zoom }, { duration: 800 });
   });
 
   // 3D buildings
