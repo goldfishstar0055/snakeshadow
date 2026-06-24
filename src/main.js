@@ -5,16 +5,21 @@ import SceneLayer from "@arcgis/core/layers/SceneLayer";
 import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer";
 import Graphic from "@arcgis/core/Graphic";
 import Point from "@arcgis/core/geometry/Point";
-import ElevationLayer from "@arcgis/core/layers/ElevationLayer";
 import PopupTemplate from "@arcgis/core/PopupTemplate";
 
 const DEFAULT_LAT = 33.9737;
 const DEFAULT_LNG = 134.3601;
 
+// ヘビ出現データ（公開Googleスプレッドシート）
+const SNAKE_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/1uyzzSIniWKDAk1QEGD7lXpi26nC3u_HGApOHQDfLY7E/export?format=csv&gid=850697240";
+const SNAKE_LOCAL_URL = import.meta.env.BASE_URL + "data/snakes.csv";
+
 const $location = document.getElementById("location-status");
 const $weather = document.getElementById("weather-status");
 const $shadow = document.getElementById("shadow-status");
 const $snakeCount = document.getElementById("snake-count");
+const $snakeUpdated = document.getElementById("snake-updated");
 const $notification = document.getElementById("notification");
 
 function notify(msg) {
@@ -24,6 +29,8 @@ function notify(msg) {
 }
 
 esriConfig.apiKey = import.meta.env.VITE_ARCGIS_API_KEY;
+
+// --- Location ---
 
 async function getLocation() {
   return new Promise((resolve) => {
@@ -38,6 +45,8 @@ async function getLocation() {
     );
   });
 }
+
+// --- Weather ---
 
 async function getWeather(lat, lng) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=cloud_cover,weather_code&timezone=Asia/Tokyo`;
@@ -63,25 +72,181 @@ function isOvercast(cloudCover, weatherCode) {
   return cloudCover >= 70 || (weatherCode > 3 && weatherCode !== undefined);
 }
 
-function parseCSV(text) {
-  const clean = text.replace(/^﻿/, "");
-  const lines = clean.trim().split("\n");
-  const headers = lines[0].split(",");
-  const records = [];
-  for (let i = 1; i < lines.length; i++) {
-    const vals = lines[i].split(",");
-    if (vals.length < headers.length) continue;
-    const row = {};
-    headers.forEach((h, idx) => (row[h.trim()] = vals[idx]?.trim() ?? ""));
-    const lat = parseFloat(row.lat);
-    const lng = parseFloat(row.lng);
-    if (isNaN(lat) || isNaN(lng)) continue;
-    row._lat = lat;
-    row._lng = lng;
-    records.push(row);
+// --- CSV parsing (引用符対応) ---
+
+function splitCSVLine(line) {
+  const fields = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        cur += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ",") {
+        fields.push(cur);
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
   }
+  fields.push(cur);
+  return fields;
+}
+
+// --- 座標の正規化 ---
+
+function toHalfWidth(s) {
+  return s.replace(/[０-９．]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
+  );
+}
+
+function parseCoord(raw) {
+  if (!raw) return NaN;
+  let s = toHalfWidth(raw.trim());
+  if (s === "" || s === "不明") return NaN;
+
+  // 度分秒: 33°57'59.1 or 134°21′22.2 etc.
+  const dms = s.match(/^(\d+(?:\.\d+)?)\s*[°度]\s*(\d+(?:\.\d+)?)\s*['''′]\s*(\d+(?:\.\d+)?)?/);
+  if (dms) {
+    const d = parseFloat(dms[1]);
+    const m = parseFloat(dms[2]);
+    const sec = dms[3] ? parseFloat(dms[3]) : 0;
+    return d + m / 60 + sec / 3600;
+  }
+
+  const num = parseFloat(s);
+  return num;
+}
+
+function isValidLat(v) { return v >= 20 && v <= 46; }
+function isValidLng(v) { return v >= 122 && v <= 154; }
+
+// --- Spreadsheet CSV parsing ---
+
+const HEADER_MAP = {
+  lat: ["緯度"],
+  lng: ["経度"],
+  date: ["ヘビ目撃（発見）年月日", "date"],
+  time: ["ヘビ目撃（発見）時間", "time"],
+  place: ["ヘビ目撃（発見）場所", "place"],
+  situation: ["状況", "situation"],
+  species: ["ヘビの種類", "species"],
+  no: ["データno.", "データno", "no"],
+};
+
+function findHeaderRow(lines) {
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const fields = splitCSVLine(lines[i]);
+    const lower = fields.map((f) => f.trim().toLowerCase());
+    if (lower.some((f) => f === "緯度") && lower.some((f) => f === "経度")) {
+      return { index: i, fields: fields.map((f) => f.trim()) };
+    }
+    if (lower.some((f) => f === "lat") && lower.some((f) => f === "lng")) {
+      return { index: i, fields: fields.map((f) => f.trim()) };
+    }
+  }
+  return null;
+}
+
+function buildColumnMap(headerFields) {
+  const colMap = {};
+  const lowerFields = headerFields.map((f) => f.toLowerCase());
+  for (const [key, candidates] of Object.entries(HEADER_MAP)) {
+    for (const c of candidates) {
+      const idx = lowerFields.indexOf(c.toLowerCase());
+      if (idx !== -1) {
+        colMap[key] = idx;
+        break;
+      }
+    }
+  }
+  return colMap;
+}
+
+function parseSnakeCSV(text) {
+  const clean = text.replace(/^﻿/, "");
+  const lines = clean.trim().split(/\r?\n/);
+  const header = findHeaderRow(lines);
+  if (!header) {
+    console.warn("ヘビCSV: ヘッダー行（緯度/経度）が見つかりません");
+    return [];
+  }
+
+  const colMap = buildColumnMap(header.fields);
+  if (colMap.lat === undefined || colMap.lng === undefined) {
+    console.warn("ヘビCSV: 緯度/経度の列が特定できません");
+    return [];
+  }
+
+  const records = [];
+  let totalRows = 0;
+  let skipped = 0;
+
+  for (let i = header.index + 1; i < lines.length; i++) {
+    const fields = splitCSVLine(lines[i]);
+    const noVal = colMap.no !== undefined ? fields[colMap.no]?.trim() : "";
+    if (colMap.no !== undefined && !noVal) continue;
+    totalRows++;
+
+    const rawLat = fields[colMap.lat]?.trim() ?? "";
+    const rawLng = fields[colMap.lng]?.trim() ?? "";
+    const lat = parseCoord(rawLat);
+    const lng = parseCoord(rawLng);
+
+    if (isNaN(lat) || isNaN(lng)) { skipped++; continue; }
+    if (!isValidLat(lat)) {
+      console.warn(`行${i + 1}: 緯度が範囲外 (${lat})、スキップ`);
+      skipped++; continue;
+    }
+    if (!isValidLng(lng)) {
+      console.warn(`行${i + 1}: 経度が範囲外 (${lng})、スキップ`);
+      skipped++; continue;
+    }
+
+    records.push({
+      _lat: lat,
+      _lng: lng,
+      date: fields[colMap.date]?.trim() ?? "",
+      time: fields[colMap.time]?.trim() ?? "",
+      place: fields[colMap.place]?.trim() ?? "",
+      situation: fields[colMap.situation]?.trim() ?? "",
+      species: fields[colMap.species]?.trim() || "不明",
+    });
+  }
+
+  console.log(`ヘビCSV: 総行数=${totalRows}, 有効=${records.length}, スキップ=${skipped}`);
   return records;
 }
+
+// --- Fetch snake data (spreadsheet → local fallback) ---
+
+async function fetchSnakeCSV() {
+  try {
+    const res = await fetch(SNAKE_SHEET_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } catch (e) {
+    console.warn("Googleスプレッドシートからの取得失敗（CORSエラーの可能性あり）:", e.message);
+    console.log("フォールバック: ローカルCSVを読み込みます");
+    const res = await fetch(SNAKE_LOCAL_URL);
+    if (!res.ok) throw new Error(`ローカルCSVも取得失敗: HTTP ${res.status}`);
+    return await res.text();
+  }
+}
+
+// --- Init ---
 
 async function init() {
   // 1. Location
@@ -142,6 +307,7 @@ async function init() {
       atmosphere: { quality: "high" },
     },
     popup: { defaultPopupTemplateEnabled: false },
+    ui: { components: ["attribution"] },
   });
 
   view.when(() => {
@@ -214,11 +380,10 @@ async function init() {
     console.error("3D建物レイヤー読み込みエラー:", e);
   }
 
-  // 4. Snake pins
+  // 4. Snake pins (from Google Spreadsheet)
   try {
-    const res = await fetch(import.meta.env.BASE_URL + "data/snakes.csv");
-    const text = await res.text();
-    const records = parseCSV(text);
+    const csvText = await fetchSnakeCSV();
+    const records = parseSnakeCSV(csvText);
 
     const popupTpl = new PopupTemplate({
       title: "{place}",
@@ -255,7 +420,7 @@ async function init() {
           date: r.date,
           time: r.time,
           place: r.place,
-          species: r.species || "不明",
+          species: r.species,
           situation: r.situation,
         },
         popupTemplate: popupTpl,
@@ -264,6 +429,10 @@ async function init() {
     }
 
     $snakeCount.textContent = `ヘビ出現データ: ${records.length} 件`;
+    const now = new Date();
+    $snakeUpdated.textContent = `最終取得: ${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,"0")}/${now.getDate().toString().padStart(2,"0")} ${now.getHours()}:${now.getMinutes().toString().padStart(2,"0")}`;
+    $snakeUpdated.style.fontSize = "11px";
+    $snakeUpdated.style.color = "#888";
   } catch (e) {
     console.error("ヘビCSV読み込みエラー:", e);
     $snakeCount.textContent = "ヘビデータ: 読み込み失敗";
