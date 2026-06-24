@@ -9,14 +9,21 @@
 <body>
   <div id="viewDiv"></div>
 
-  <div id="info-panel">
-    <h3>ヘビ日陰マップ</h3>
-    <div id="location-status">位置情報を取得中…</div>
-    <div id="weather-status">天気を取得中…</div>
-    <div id="shadow-status">影の状態を確認中…</div>
-    <div id="mode-status"></div>
-    <div id="snake-count">ヘビデータ読込中…</div>
-    <div id="snake-updated"></div>
+  <div id="info-panel" class="collapsed">
+    <div id="info-header">
+      <span id="info-summary">ヘビ日陰マップ</span>
+      <button id="info-toggle" title="開く/閉じる">
+        <svg id="info-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
+    </div>
+    <div id="info-body">
+      <div id="location-status">位置情報を取得中…</div>
+      <div id="weather-status">天気を取得中…</div>
+      <div id="shadow-status">影の状態を確認中…</div>
+      <div id="mode-status"></div>
+      <div id="snake-count">ヘビデータ読込中…</div>
+      <div id="snake-updated"></div>
+    </div>
   </div>
 
   <div id="toolbar">
@@ -41,38 +48,43 @@
 
   <!-- プレビューパネル -->
   <div id="preview-panel" class="hidden">
-    <div id="preview-tabs">
-      <button class="preview-tab active" data-tab="sun">日光</button>
-      <button class="preview-tab" data-tab="weather">天気</button>
+    <div id="preview-header">
+      <div id="preview-tabs">
+        <button class="preview-tab active" data-tab="sun">日光</button>
+        <button class="preview-tab" data-tab="weather">天気</button>
+      </div>
+      <button id="preview-close" title="閉じる">✕</button>
     </div>
 
-    <div id="tab-sun" class="tab-content active">
-      <label class="pv-label">
-        時刻
-        <span id="pv-time-display">12:00 JST</span>
-      </label>
-      <div class="pv-slider-row">
-        <input type="range" id="pv-time-slider" min="0" max="1440" value="720" step="1" />
-        <button id="pv-play" title="再生/停止">▶</button>
+    <div id="preview-body">
+      <div id="tab-sun" class="tab-content active">
+        <label class="pv-label">
+          時刻
+          <span id="pv-time-display">12:00 JST</span>
+        </label>
+        <div class="pv-slider-row">
+          <input type="range" id="pv-time-slider" min="0" max="1440" value="720" step="1" />
+          <button id="pv-play" title="再生/停止">▶</button>
+        </div>
+        <label class="pv-label">日付</label>
+        <input type="date" id="pv-date-picker" />
       </div>
-      <label class="pv-label">日付</label>
-      <input type="date" id="pv-date-picker" />
-    </div>
 
-    <div id="tab-weather" class="tab-content">
-      <label class="pv-label">天気</label>
-      <div id="pv-weather-icons">
-        <button class="weather-btn active" data-weather="sunny" title="晴れ">☀️</button>
-        <button class="weather-btn" data-weather="cloudy" title="曇り">☁️</button>
-        <button class="weather-btn" data-weather="rainy" title="雨">🌧️</button>
-        <button class="weather-btn" data-weather="snowy" title="雪">❄️</button>
-        <button class="weather-btn" data-weather="foggy" title="霧">🌫️</button>
+      <div id="tab-weather" class="tab-content">
+        <label class="pv-label">天気</label>
+        <div id="pv-weather-icons">
+          <button class="weather-btn active" data-weather="sunny" title="晴れ">☀️</button>
+          <button class="weather-btn" data-weather="cloudy" title="曇り">☁️</button>
+          <button class="weather-btn" data-weather="rainy" title="雨">🌧️</button>
+          <button class="weather-btn" data-weather="snowy" title="雪">❄️</button>
+          <button class="weather-btn" data-weather="foggy" title="霧">🌫️</button>
+        </div>
+        <label class="pv-label">
+          雲量
+          <span id="pv-cloud-display">30%</span>
+        </label>
+        <input type="range" id="pv-cloud-slider" min="0" max="100" value="30" step="1" />
       </div>
-      <label class="pv-label">
-        雲量
-        <span id="pv-cloud-display">30%</span>
-      </label>
-      <input type="range" id="pv-cloud-slider" min="0" max="100" value="30" step="1" />
     </div>
   </div>
 

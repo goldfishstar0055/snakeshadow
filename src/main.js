@@ -452,6 +452,7 @@ async function init() {
     }
 
     $snakeCount.textContent = `ヘビ出現データ: ${records.length} 件`;
+    updateInfoSummary();
     const now = new Date();
     $snakeUpdated.textContent = `最終取得: ${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,"0")}/${now.getDate().toString().padStart(2,"0")} ${now.getHours()}:${now.getMinutes().toString().padStart(2,"0")}`;
     $snakeUpdated.style.fontSize = "11px";
@@ -481,6 +482,34 @@ async function init() {
   let currentMode = "realtime";
   let playAnimId = null;
 
+  // --- Info panel collapse/expand ---
+  const $infoPanel = document.getElementById("info-panel");
+  const $infoHeader = document.getElementById("info-header");
+  const $infoSummary = document.getElementById("info-summary");
+
+  function updateInfoSummary() {
+    const countEl = document.getElementById("snake-count");
+    const count = countEl ? countEl.textContent : "";
+    $infoSummary.textContent = `ヘビ日陰マップ — ${count}`;
+  }
+
+  $infoHeader.addEventListener("click", () => {
+    $infoPanel.classList.toggle("collapsed");
+    setTimeout(positionModeUI, 310);
+  });
+
+  // --- Preview close button ---
+  document.getElementById("preview-close").addEventListener("click", () => {
+    $previewPanel.classList.add("minimized");
+  });
+
+  // Reopen preview body when tab is clicked while minimized
+  document.querySelectorAll(".preview-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      $previewPanel.classList.remove("minimized");
+    });
+  });
+
   // Position mode-toggle and preview-panel dynamically below info-panel
   function positionModeUI() {
     const infoPanel = document.getElementById("info-panel");
@@ -489,6 +518,9 @@ async function init() {
     if (window.innerWidth > 500) {
       modeToggle.style.top = (rect.bottom + 8) + "px";
       $previewPanel.style.top = (rect.bottom + 8 + modeToggle.offsetHeight + 8) + "px";
+    } else {
+      modeToggle.style.top = "";
+      $previewPanel.style.top = "86px";
     }
   }
 
@@ -667,6 +699,7 @@ async function init() {
     $modePreview.classList.add("active");
     $modeRealtime.classList.remove("active");
     $previewPanel.classList.remove("hidden");
+    $previewPanel.classList.remove("minimized");
     positionModeUI();
 
     // Initialize with current values
