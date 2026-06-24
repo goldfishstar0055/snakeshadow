@@ -169,6 +169,15 @@ async function init() {
     popupTemplate: { title: "現在地", content: `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` },
   }));
 
+  // Locate button
+  document.getElementById("btn-locate").addEventListener("click", () => {
+    view.goTo({
+      position: { latitude: loc.lat - 0.001, longitude: loc.lng, z: 400 },
+      tilt: 65,
+      heading: 0,
+    }, { duration: 1000 });
+  });
+
   // Camera toggle
   const btnTop = document.getElementById("btn-top");
   const btnAngle = document.getElementById("btn-angle");

@@ -30,7 +30,7 @@ html, body, #viewDiv {
   font-size: 15px;
 }
 
-#camera-buttons {
+#toolbar {
   position: absolute;
   top: 12px;
   left: 12px;
@@ -39,8 +39,11 @@ html, body, #viewDiv {
   gap: 6px;
 }
 
-#camera-buttons button {
-  padding: 8px 14px;
+#toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
   border: none;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
@@ -52,10 +55,12 @@ html, body, #viewDiv {
   color: #333;
 }
 
-#camera-buttons button.active {
+#toolbar button.active {
   background: #2563eb;
   color: #fff;
 }
+
+#btn-locate { color: #2563eb; font-weight: 600; }
 
 #notification {
   position: absolute;
@@ -76,13 +81,30 @@ html, body, #viewDiv {
 #notification.hidden { display: none; }
 
 @media (max-width: 500px) {
+  #toolbar {
+    top: 8px;
+    left: 8px;
+    gap: 4px;
+  }
+
+  #toolbar button {
+    padding: 7px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+
   #info-panel {
     top: auto;
-    bottom: 12px;
+    bottom: 8px;
     right: 8px;
     left: 8px;
     max-width: none;
-    font-size: 12px;
+    font-size: 11px;
     padding: 10px 12px;
+    border-radius: 8px;
   }
+
+  #info-panel h3 { font-size: 13px; margin-bottom: 4px; }
+
+  #notification { bottom: 100px; font-size: 12px; }
 }
