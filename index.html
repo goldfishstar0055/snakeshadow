@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ヘビ日陰マップ</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="viewDiv"></div>
+  <div id="info-panel">
+    <h3>ヘビ日陰マップ</h3>
+    <div id="location-status">位置情報を取得中…</div>
+    <div id="weather-status">天気を取得中…</div>
+    <div id="shadow-status">影の状態を確認中…</div>
+    <div id="snake-count">ヘビデータ読込中…</div>
+  </div>
+  <div id="camera-buttons">
+    <button id="btn-top" title="真上から見る">真上</button>
+    <button id="btn-angle" class="active" title="斜めから見る">斜め</button>
+  </div>
+  <div id="notification" class="hidden"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
