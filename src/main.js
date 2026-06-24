@@ -310,6 +310,21 @@ async function init() {
     ui: { components: ["attribution"] },
   });
 
+  // Apply initial weather animation based on Open-Meteo data
+  function weatherCodeToType(code) {
+    if (code <= 1) return "sunny";
+    if (code <= 3) return "cloudy";
+    if (code <= 49) return "foggy";
+    if (code <= 69) return "rainy";
+    if (code <= 79) return "snowy";
+    return "rainy";
+  }
+
+  view.environment.weather = {
+    type: weatherCodeToType(weather.weatherCode),
+    cloudCover: weather.cloudCover / 100,
+  };
+
   view.when(() => {
     view.goTo({ target: userCenter, tilt: 65, zoom: 17 }, { duration: 0 });
   });
@@ -587,7 +602,7 @@ async function init() {
       if (!lastTs) lastTs = ts;
       const dt = ts - lastTs;
       lastTs = ts;
-      val += dt * 0.8; // ~48 sec for full day
+      val += dt * 0.15; // ~160 sec for full day
       if (val >= 1440) {
         val = 1440;
         $pvTimeSlider.value = val;
@@ -637,7 +652,7 @@ async function init() {
         const oc = isOvercast(w.cloudCover, w.weatherCode);
         view.environment.lighting.date = new Date();
         view.environment.lighting.directShadowsEnabled = !oc;
-        view.environment.weather = { type: "sunny", cloudCover: w.cloudCover / 100 };
+        view.environment.weather = { type: weatherCodeToType(w.weatherCode), cloudCover: w.cloudCover / 100 };
         updateShadowStatus(!oc);
       } catch {
         view.environment.lighting.date = new Date();
