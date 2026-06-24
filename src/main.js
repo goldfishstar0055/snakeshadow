@@ -315,11 +315,19 @@ async function init() {
   });
 
   // Shadow status
+  function updateShadowStatus(shadowing) {
+    if (shadowing) {
+      $shadow.textContent = "影: ON（建物・地形の影＝日陰の目安です）";
+    } else {
+      $shadow.textContent = "影: OFF（曇り/雨のため屋外は全体的に日陰です）";
+    }
+  }
+
   if (overcast) {
-    $shadow.textContent = "影: OFF（曇り/雨のため屋外は全体的に日陰です）";
+    updateShadowStatus(false);
     notify("今は曇り/雨のため屋外は全体的に日陰です");
   } else {
-    $shadow.textContent = "影: ON（建物・地形の影＝日陰の目安です）";
+    updateShadowStatus(true);
   }
 
   // User location pin
@@ -437,6 +445,245 @@ async function init() {
     console.error("ヘビCSV読み込みエラー:", e);
     $snakeCount.textContent = "ヘビデータ: 読み込み失敗";
   }
+
+  // =============================================
+  // 5. Mode control (Realtime / Preview)
+  // =============================================
+
+  const $modeStatus = document.getElementById("mode-status");
+  const $modeRealtime = document.getElementById("mode-realtime");
+  const $modePreview = document.getElementById("mode-preview");
+  const $previewPanel = document.getElementById("preview-panel");
+  const $pvTimeSlider = document.getElementById("pv-time-slider");
+  const $pvTimeDisplay = document.getElementById("pv-time-display");
+  const $pvDatePicker = document.getElementById("pv-date-picker");
+  const $pvPlay = document.getElementById("pv-play");
+  const $pvCloudSlider = document.getElementById("pv-cloud-slider");
+  const $pvCloudDisplay = document.getElementById("pv-cloud-display");
+  const previewTabs = document.querySelectorAll(".preview-tab");
+  const weatherBtns = document.querySelectorAll(".weather-btn");
+
+  let currentMode = "realtime";
+  let playAnimId = null;
+
+  // Position mode-toggle and preview-panel dynamically below info-panel
+  function positionModeUI() {
+    const infoPanel = document.getElementById("info-panel");
+    const modeToggle = document.getElementById("mode-toggle");
+    const rect = infoPanel.getBoundingClientRect();
+    if (window.innerWidth > 500) {
+      modeToggle.style.top = (rect.bottom + 8) + "px";
+      $previewPanel.style.top = (rect.bottom + 8 + modeToggle.offsetHeight + 8) + "px";
+    }
+  }
+
+  $modeStatus.textContent = "モード: リアルタイム";
+
+  // --- Throttle helper ---
+  function throttle(fn, ms) {
+    let last = 0;
+    return (...args) => {
+      const now = Date.now();
+      if (now - last >= ms) { last = now; fn(...args); }
+    };
+  }
+
+  // --- JST date builder ---
+  function buildJSTDate(dateStr, minutes) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const h = Math.floor(minutes / 60);
+    const min = Math.round(minutes % 60);
+    const jstOffset = 9 * 60;
+    const utc = Date.UTC(y, m - 1, d, h, min, 0) - jstOffset * 60000;
+    return new Date(utc);
+  }
+
+  function formatTime(minutes) {
+    const h = Math.floor(minutes / 60);
+    const m = Math.round(minutes % 60);
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")} JST`;
+  }
+
+  function todayStr() {
+    const n = new Date();
+    const y = n.getFullYear();
+    const m = (n.getMonth() + 1).toString().padStart(2, "0");
+    const d = n.getDate().toString().padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function nowMinutes() {
+    const n = new Date();
+    return n.getHours() * 60 + n.getMinutes();
+  }
+
+  // --- Preview state ---
+  let pvWeatherType = "sunny";
+  let pvCloudCover = 30;
+
+  function shouldShadowPreview() {
+    if (pvWeatherType !== "sunny" && pvCloudCover >= 70) return false;
+    return true;
+  }
+
+  // --- Apply preview environment ---
+  const applyPreviewEnv = throttle(() => {
+    const minutes = parseInt($pvTimeSlider.value);
+    const dateStr = $pvDatePicker.value;
+    $pvTimeDisplay.textContent = formatTime(minutes);
+
+    const shadowing = shouldShadowPreview();
+    view.environment.lighting.date = buildJSTDate(dateStr, minutes);
+    view.environment.lighting.directShadowsEnabled = shadowing;
+    view.environment.weather = {
+      type: pvWeatherType,
+      cloudCover: pvCloudCover / 100,
+    };
+
+    updateShadowStatus(shadowing);
+    const wLabels = { sunny: "晴れ", cloudy: "曇り", rainy: "雨", snowy: "雪", foggy: "霧" };
+    $modeStatus.textContent = `プレビュー: ${dateStr} ${formatTime(minutes)} ${wLabels[pvWeatherType]}`;
+    $weather.textContent = `天気: ${wLabels[pvWeatherType]}　雲量: ${pvCloudCover}%`;
+  }, 30);
+
+  // --- Preview tab switching ---
+  previewTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      previewTabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+      document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+    });
+  });
+
+  // --- Time slider ---
+  $pvTimeSlider.addEventListener("input", applyPreviewEnv);
+
+  // --- Date picker ---
+  $pvDatePicker.addEventListener("change", applyPreviewEnv);
+
+  // --- Play button ---
+  function stopPlay() {
+    if (playAnimId !== null) {
+      cancelAnimationFrame(playAnimId);
+      playAnimId = null;
+    }
+    $pvPlay.textContent = "▶";
+    $pvPlay.classList.remove("playing");
+  }
+
+  $pvPlay.addEventListener("click", () => {
+    if (playAnimId !== null) {
+      stopPlay();
+      return;
+    }
+    $pvPlay.textContent = "■";
+    $pvPlay.classList.add("playing");
+    let val = parseInt($pvTimeSlider.value);
+    if (val >= 1440) val = 0;
+    let lastTs = null;
+
+    function step(ts) {
+      if (!lastTs) lastTs = ts;
+      const dt = ts - lastTs;
+      lastTs = ts;
+      val += dt * 0.8; // ~48 sec for full day
+      if (val >= 1440) {
+        val = 1440;
+        $pvTimeSlider.value = val;
+        applyPreviewEnv();
+        stopPlay();
+        return;
+      }
+      $pvTimeSlider.value = Math.round(val);
+      applyPreviewEnv();
+      playAnimId = requestAnimationFrame(step);
+    }
+    playAnimId = requestAnimationFrame(step);
+  });
+
+  // --- Weather buttons ---
+  weatherBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      weatherBtns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      pvWeatherType = btn.dataset.weather;
+      applyPreviewEnv();
+    });
+  });
+
+  // --- Cloud slider ---
+  $pvCloudSlider.addEventListener("input", () => {
+    pvCloudCover = parseInt($pvCloudSlider.value);
+    $pvCloudDisplay.textContent = pvCloudCover + "%";
+    applyPreviewEnv();
+  });
+
+  // --- Mode switching ---
+  function activateRealtime() {
+    currentMode = "realtime";
+    $modeRealtime.classList.add("active");
+    $modePreview.classList.remove("active");
+    $previewPanel.classList.add("hidden");
+    stopPlay();
+
+    // Re-fetch weather and reset to "now"
+    $modeStatus.textContent = "モード: リアルタイム";
+    (async () => {
+      try {
+        const w = await getWeather(loc.lat, loc.lng);
+        weather = w;
+        $weather.textContent = `天気: ${weatherCodeLabel(w.weatherCode)}　雲量: ${w.cloudCover}%`;
+        const oc = isOvercast(w.cloudCover, w.weatherCode);
+        view.environment.lighting.date = new Date();
+        view.environment.lighting.directShadowsEnabled = !oc;
+        view.environment.weather = { type: "sunny", cloudCover: w.cloudCover / 100 };
+        updateShadowStatus(!oc);
+      } catch {
+        view.environment.lighting.date = new Date();
+        view.environment.lighting.directShadowsEnabled = true;
+        updateShadowStatus(true);
+      }
+    })();
+  }
+
+  function activatePreview() {
+    currentMode = "preview";
+    $modePreview.classList.add("active");
+    $modeRealtime.classList.remove("active");
+    $previewPanel.classList.remove("hidden");
+    positionModeUI();
+
+    // Initialize with current values
+    $pvDatePicker.value = todayStr();
+    const mins = nowMinutes();
+    $pvTimeSlider.value = mins;
+    $pvTimeDisplay.textContent = formatTime(mins);
+
+    // Map current weather to preview weather type
+    pvWeatherType = "sunny";
+    if (weather.weatherCode > 3 && weather.weatherCode <= 49) pvWeatherType = "foggy";
+    else if (weather.weatherCode > 49 && weather.weatherCode <= 69) pvWeatherType = "rainy";
+    else if (weather.weatherCode > 69 && weather.weatherCode <= 79) pvWeatherType = "snowy";
+    else if (weather.weatherCode > 1 && weather.weatherCode <= 3) pvWeatherType = "cloudy";
+
+    weatherBtns.forEach((b) => {
+      b.classList.toggle("active", b.dataset.weather === pvWeatherType);
+    });
+
+    pvCloudCover = weather.cloudCover;
+    $pvCloudSlider.value = pvCloudCover;
+    $pvCloudDisplay.textContent = pvCloudCover + "%";
+
+    applyPreviewEnv();
+  }
+
+  $modeRealtime.addEventListener("click", activateRealtime);
+  $modePreview.addEventListener("click", activatePreview);
+
+  // Position UI after view loads
+  view.when(() => positionModeUI());
+  window.addEventListener("resize", positionModeUI);
 }
 
 init();

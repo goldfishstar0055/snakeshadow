@@ -8,6 +8,8 @@ html, body, #viewDiv {
   overflow: hidden;
 }
 
+/* --- Info panel (right top) --- */
+
 #info-panel {
   position: absolute;
   top: 12px;
@@ -25,10 +27,11 @@ html, body, #viewDiv {
   z-index: 10;
 }
 
-#info-panel h3 {
-  margin-bottom: 8px;
-  font-size: 15px;
-}
+#info-panel h3 { margin-bottom: 8px; font-size: 15px; }
+
+#mode-status { color: #2563eb; font-weight: 600; font-size: 12px; }
+
+/* --- Toolbar (left top) --- */
 
 #toolbar {
   position: absolute;
@@ -55,12 +58,11 @@ html, body, #viewDiv {
   color: #333;
 }
 
-#toolbar button.active {
-  background: #2563eb;
-  color: #fff;
-}
+#toolbar button.active { background: #2563eb; color: #fff; }
 
 #btn-locate { color: #2563eb; font-weight: 600; }
+
+/* --- Zoom buttons (right bottom) --- */
 
 #zoom-buttons {
   position: absolute;
@@ -89,6 +91,160 @@ html, body, #viewDiv {
   justify-content: center;
 }
 
+/* --- Mode toggle (right, below info panel) --- */
+
+#mode-toggle {
+  position: absolute;
+  top: auto;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  overflow: hidden;
+}
+
+#mode-toggle button {
+  padding: 7px 14px;
+  border: none;
+  background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  color: #666;
+  transition: background 0.15s, color 0.15s;
+}
+
+#mode-toggle button.active {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* --- Preview panel --- */
+
+#preview-panel {
+  position: absolute;
+  right: 12px;
+  z-index: 10;
+  width: 280px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  color: #333;
+  overflow: hidden;
+}
+
+#preview-panel.hidden { display: none; }
+
+#preview-tabs {
+  display: flex;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.preview-tab {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  color: #888;
+  text-align: center;
+  transition: color 0.15s;
+}
+
+.preview-tab.active {
+  color: #2563eb;
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 #2563eb;
+}
+
+.tab-content { display: none; padding: 14px 16px; }
+.tab-content.active { display: block; }
+
+.pv-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+.pv-label span { font-weight: 600; color: #333; }
+
+.pv-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.pv-slider-row input[type="range"] { flex: 1; }
+
+#pv-play {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+#pv-play.playing { background: #dc2626; }
+
+#pv-date-picker {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+#pv-weather-icons {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.weather-btn {
+  flex: 1;
+  padding: 8px 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #f3f4f6;
+  font-size: 20px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.weather-btn.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+#pv-cloud-slider {
+  width: 100%;
+  margin-top: 2px;
+}
+
+/* --- Notification --- */
+
 #notification {
   position: absolute;
   bottom: 20px;
@@ -107,18 +263,11 @@ html, body, #viewDiv {
 
 #notification.hidden { display: none; }
 
-@media (max-width: 500px) {
-  #toolbar {
-    top: 8px;
-    left: 8px;
-    gap: 4px;
-  }
+/* --- Mobile --- */
 
-  #toolbar button {
-    padding: 7px 10px;
-    font-size: 12px;
-    border-radius: 6px;
-  }
+@media (max-width: 500px) {
+  #toolbar { top: 8px; left: 8px; gap: 4px; }
+  #toolbar button { padding: 7px 10px; font-size: 12px; border-radius: 6px; }
 
   #info-panel {
     top: auto;
@@ -130,8 +279,19 @@ html, body, #viewDiv {
     padding: 10px 12px;
     border-radius: 8px;
   }
-
   #info-panel h3 { font-size: 13px; margin-bottom: 4px; }
+
+  #mode-toggle {
+    right: 8px;
+    top: 50px;
+  }
+
+  #preview-panel {
+    right: 8px;
+    left: 8px;
+    width: auto;
+    top: 86px;
+  }
 
   #zoom-buttons { bottom: 80px; right: 8px; }
   #zoom-buttons button { width: 36px; height: 36px; font-size: 18px; }

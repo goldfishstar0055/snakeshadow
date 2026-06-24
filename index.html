@@ -8,14 +8,17 @@
 </head>
 <body>
   <div id="viewDiv"></div>
+
   <div id="info-panel">
     <h3>ヘビ日陰マップ</h3>
     <div id="location-status">位置情報を取得中…</div>
     <div id="weather-status">天気を取得中…</div>
     <div id="shadow-status">影の状態を確認中…</div>
+    <div id="mode-status"></div>
     <div id="snake-count">ヘビデータ読込中…</div>
     <div id="snake-updated"></div>
   </div>
+
   <div id="toolbar">
     <button id="btn-locate" title="現在地に移動">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
@@ -24,10 +27,55 @@
     <button id="btn-top" title="真上から見る">真上</button>
     <button id="btn-angle" class="active" title="斜めから見る">斜め</button>
   </div>
+
   <div id="zoom-buttons">
     <button id="btn-zoom-in" title="ズームイン">＋</button>
     <button id="btn-zoom-out" title="ズームアウト">−</button>
   </div>
+
+  <!-- モード切替 -->
+  <div id="mode-toggle">
+    <button id="mode-realtime" class="active">リアルタイム</button>
+    <button id="mode-preview">プレビュー</button>
+  </div>
+
+  <!-- プレビューパネル -->
+  <div id="preview-panel" class="hidden">
+    <div id="preview-tabs">
+      <button class="preview-tab active" data-tab="sun">日光</button>
+      <button class="preview-tab" data-tab="weather">天気</button>
+    </div>
+
+    <div id="tab-sun" class="tab-content active">
+      <label class="pv-label">
+        時刻
+        <span id="pv-time-display">12:00 JST</span>
+      </label>
+      <div class="pv-slider-row">
+        <input type="range" id="pv-time-slider" min="0" max="1440" value="720" step="1" />
+        <button id="pv-play" title="再生/停止">▶</button>
+      </div>
+      <label class="pv-label">日付</label>
+      <input type="date" id="pv-date-picker" />
+    </div>
+
+    <div id="tab-weather" class="tab-content">
+      <label class="pv-label">天気</label>
+      <div id="pv-weather-icons">
+        <button class="weather-btn active" data-weather="sunny" title="晴れ">☀️</button>
+        <button class="weather-btn" data-weather="cloudy" title="曇り">☁️</button>
+        <button class="weather-btn" data-weather="rainy" title="雨">🌧️</button>
+        <button class="weather-btn" data-weather="snowy" title="雪">❄️</button>
+        <button class="weather-btn" data-weather="foggy" title="霧">🌫️</button>
+      </div>
+      <label class="pv-label">
+        雲量
+        <span id="pv-cloud-display">30%</span>
+      </label>
+      <input type="range" id="pv-cloud-slider" min="0" max="100" value="30" step="1" />
+    </div>
+  </div>
+
   <div id="notification" class="hidden"></div>
   <script type="module" src="/src/main.js"></script>
 </body>
