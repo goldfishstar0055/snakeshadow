@@ -64,7 +64,8 @@ function isOvercast(cloudCover, weatherCode) {
 }
 
 function parseCSV(text) {
-  const lines = text.trim().split("\n");
+  const clean = text.replace(/^﻿/, "");
+  const lines = clean.trim().split("\n");
   const headers = lines[0].split(",");
   const records = [];
   for (let i = 1; i < lines.length; i++) {
@@ -106,6 +107,11 @@ async function init() {
   const overcast = isOvercast(weather.cloudCover, weather.weatherCode);
 
   // 3. Map
+  const userLayer = new GraphicsLayer({
+    title: "現在地",
+    elevationInfo: { mode: "relative-to-ground", offset: 3 },
+  });
+
   const snakeLayer = new GraphicsLayer({
     title: "ヘビ出現",
     elevationInfo: { mode: "relative-to-ground", offset: 5 },
@@ -114,7 +120,7 @@ async function init() {
   const map = new Map({
     basemap: "arcgis/topographic",
     ground: "world-elevation",
-    layers: [snakeLayer],
+    layers: [snakeLayer, userLayer],
   });
 
   const view = new SceneView({
@@ -143,6 +149,25 @@ async function init() {
   } else {
     $shadow.textContent = "影: ON（建物・地形の影＝日陰の目安です）";
   }
+
+  // User location pin
+  userLayer.add(new Graphic({
+    geometry: new Point({ latitude: loc.lat, longitude: loc.lng }),
+    symbol: {
+      type: "point-3d",
+      symbolLayers: [
+        {
+          type: "icon",
+          size: 18,
+          resource: { primitive: "circle" },
+          material: { color: [30, 120, 255, 0.9] },
+          outline: { color: [255, 255, 255], size: 3 },
+        },
+      ],
+    },
+    attributes: { label: "現在地" },
+    popupTemplate: { title: "現在地", content: `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` },
+  }));
 
   // Camera toggle
   const btnTop = document.getElementById("btn-top");
@@ -180,7 +205,7 @@ async function init() {
 
   // 4. Snake pins
   try {
-    const res = await fetch("/data/snakes.csv");
+    const res = await fetch(import.meta.env.BASE_URL + "data/snakes.csv");
     const text = await res.text();
     const records = parseCSV(text);
 
