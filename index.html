@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ヘビ日陰マップ</title>
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ヘビ日陰マップ" />
+  <link rel="apple-touch-icon" href="icons/icon.svg" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
@@ -23,6 +29,7 @@
       <div id="mode-status"></div>
       <div id="snake-count">ヘビデータ読込中…</div>
       <div id="snake-updated"></div>
+      <button id="btn-reload-data" title="データを再取得">🔄 データ再読み込み</button>
     </div>
   </div>
 
@@ -40,6 +47,26 @@
     <button id="btn-zoom-out" title="ズームアウト">−</button>
   </div>
 
+  <!-- 報告ボタン -->
+  <button id="btn-report">🐍 目撃を報告</button>
+
+  <!-- 報告モード中のバナー -->
+  <div id="report-banner" class="hidden">
+    <span>📍 地図上で目撃した場所をタップしてください</span>
+    <button id="report-cancel">キャンセル</button>
+  </div>
+
+  <!-- 報告確認ダイアログ -->
+  <div id="report-confirm" class="hidden">
+    <p>この地点でヘビ目撃を報告しますか？</p>
+    <p id="report-coords"></p>
+    <div class="report-confirm-btns">
+      <button id="report-submit">この地点で報告</button>
+      <button id="report-back">やり直す</button>
+    </div>
+    <p class="report-note">Googleフォームが開きます。送信後、反映には時間がかかる場合があります。</p>
+  </div>
+
   <!-- モード切替 -->
   <div id="mode-toggle">
     <button id="mode-realtime" class="active">リアルタイム</button>
@@ -55,7 +82,6 @@
       </div>
       <button id="preview-close" title="閉じる">✕</button>
     </div>
-
     <div id="preview-body">
       <div id="tab-sun" class="tab-content active">
         <label class="pv-label">
@@ -69,7 +95,6 @@
         <label class="pv-label">日付</label>
         <input type="date" id="pv-date-picker" />
       </div>
-
       <div id="tab-weather" class="tab-content">
         <label class="pv-label">天気</label>
         <div id="pv-weather-icons">

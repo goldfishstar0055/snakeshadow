@@ -10,10 +10,14 @@ import PopupTemplate from "@arcgis/core/PopupTemplate";
 const DEFAULT_LAT = 33.9737;
 const DEFAULT_LNG = 134.3601;
 
-// ヘビ出現データ（公開Googleスプレッドシート）
+// ヘビ出現データ（Googleフォーム回答シート）
 const SNAKE_SHEET_URL =
-  "https://docs.google.com/spreadsheets/d/1uyzzSIniWKDAk1QEGD7lXpi26nC3u_HGApOHQDfLY7E/export?format=csv&gid=850697240";
+  "https://docs.google.com/spreadsheets/d/1Hh4kp1sKAJzpksbhnSPkHvbaRR2sxmqtapPdEGd1Xsg/export?format=csv";
 const SNAKE_LOCAL_URL = import.meta.env.BASE_URL + "data/snakes.csv";
+
+// Googleフォーム事前入力URL
+const REPORT_FORM_BASE =
+  "https://docs.google.com/forms/d/e/1FAIpQLSci1aL3mdn_JX8razqEc7B3AGfw8SIgfAqkYGxY-KkjqJvVvg/viewform?usp=pp_url";
 
 const $location = document.getElementById("location-status");
 const $weather = document.getElementById("weather-status");
@@ -117,7 +121,6 @@ function parseCoord(raw) {
   let s = toHalfWidth(raw.trim());
   if (s === "" || s === "不明") return NaN;
 
-  // 度分秒: 33°57'59.1 or 134°21′22.2 etc.
   const dms = s.match(/^(\d+(?:\.\d+)?)\s*[°度]\s*(\d+(?:\.\d+)?)\s*['''′]\s*(\d+(?:\.\d+)?)?/);
   if (dms) {
     const d = parseFloat(dms[1]);
@@ -126,34 +129,36 @@ function parseCoord(raw) {
     return d + m / 60 + sec / 3600;
   }
 
-  const num = parseFloat(s);
-  return num;
+  return parseFloat(s);
 }
 
 function isValidLat(v) { return v >= 20 && v <= 46; }
 function isValidLng(v) { return v >= 122 && v <= 154; }
 
-// --- Spreadsheet CSV parsing ---
+// --- Spreadsheet CSV parsing (部分一致ヘッダー検出) ---
 
-const HEADER_MAP = {
-  lat: ["緯度"],
-  lng: ["経度"],
-  date: ["ヘビ目撃（発見）年月日", "date"],
-  time: ["ヘビ目撃（発見）時間", "time"],
-  place: ["ヘビ目撃（発見）場所", "place"],
-  situation: ["状況", "situation"],
-  species: ["ヘビの種類", "species"],
-  no: ["データno.", "データno", "no"],
+const HEADER_KEYWORDS = {
+  lat: "緯度",
+  lng: "経度",
+  date: "日付",
+  time: "時間",
+  place: "場所",
+  situation: "状況",
+  species: "種類",
 };
+
+const SKIP_KEYWORDS = ["メール", "タイムスタンプ"];
 
 function findHeaderRow(lines) {
   for (let i = 0; i < Math.min(lines.length, 10); i++) {
     const fields = splitCSVLine(lines[i]);
-    const lower = fields.map((f) => f.trim().toLowerCase());
-    if (lower.some((f) => f === "緯度") && lower.some((f) => f === "経度")) {
+    const hasLat = fields.some((f) => f.includes("緯度"));
+    const hasLng = fields.some((f) => f.includes("経度"));
+    if (hasLat && hasLng) {
       return { index: i, fields: fields.map((f) => f.trim()) };
     }
-    if (lower.some((f) => f === "lat") && lower.some((f) => f === "lng")) {
+    const lower = fields.map((f) => f.trim().toLowerCase());
+    if (lower.includes("lat") && lower.includes("lng")) {
       return { index: i, fields: fields.map((f) => f.trim()) };
     }
   }
@@ -162,15 +167,20 @@ function findHeaderRow(lines) {
 
 function buildColumnMap(headerFields) {
   const colMap = {};
-  const lowerFields = headerFields.map((f) => f.toLowerCase());
-  for (const [key, candidates] of Object.entries(HEADER_MAP)) {
-    for (const c of candidates) {
-      const idx = lowerFields.indexOf(c.toLowerCase());
-      if (idx !== -1) {
-        colMap[key] = idx;
-        break;
-      }
-    }
+  for (const [key, keyword] of Object.entries(HEADER_KEYWORDS)) {
+    const idx = headerFields.findIndex((f) => f.includes(keyword));
+    if (idx !== -1) colMap[key] = idx;
+  }
+  // Fallback: exact match for English headers (local CSV)
+  if (colMap.lat === undefined) {
+    const lower = headerFields.map((f) => f.toLowerCase());
+    if (lower.includes("lat")) colMap.lat = lower.indexOf("lat");
+    if (lower.includes("lng")) colMap.lng = lower.indexOf("lng");
+    if (colMap.date === undefined && lower.includes("date")) colMap.date = lower.indexOf("date");
+    if (colMap.time === undefined && lower.includes("time")) colMap.time = lower.indexOf("time");
+    if (colMap.place === undefined && lower.includes("place")) colMap.place = lower.indexOf("place");
+    if (colMap.situation === undefined && lower.includes("situation")) colMap.situation = lower.indexOf("situation");
+    if (colMap.species === undefined && lower.includes("species")) colMap.species = lower.indexOf("species");
   }
   return colMap;
 }
@@ -196,8 +206,7 @@ function parseSnakeCSV(text) {
 
   for (let i = header.index + 1; i < lines.length; i++) {
     const fields = splitCSVLine(lines[i]);
-    const noVal = colMap.no !== undefined ? fields[colMap.no]?.trim() : "";
-    if (colMap.no !== undefined && !noVal) continue;
+    if (fields.every((f) => f.trim() === "")) continue;
     totalRows++;
 
     const rawLat = fields[colMap.lat]?.trim() ?? "";
@@ -218,11 +227,11 @@ function parseSnakeCSV(text) {
     records.push({
       _lat: lat,
       _lng: lng,
-      date: fields[colMap.date]?.trim() ?? "",
-      time: fields[colMap.time]?.trim() ?? "",
-      place: fields[colMap.place]?.trim() ?? "",
-      situation: fields[colMap.situation]?.trim() ?? "",
-      species: fields[colMap.species]?.trim() || "不明",
+      date: colMap.date !== undefined ? (fields[colMap.date]?.trim() ?? "") : "",
+      time: colMap.time !== undefined ? (fields[colMap.time]?.trim() ?? "") : "",
+      place: colMap.place !== undefined ? (fields[colMap.place]?.trim() ?? "") : "",
+      situation: colMap.situation !== undefined ? (fields[colMap.situation]?.trim() ?? "") : "",
+      species: colMap.species !== undefined ? (fields[colMap.species]?.trim() || "不明") : "不明",
     });
   }
 
@@ -230,7 +239,7 @@ function parseSnakeCSV(text) {
   return records;
 }
 
-// --- Fetch snake data (spreadsheet → local fallback) ---
+// --- Fetch snake data ---
 
 async function fetchSnakeCSV() {
   try {
@@ -282,10 +291,15 @@ async function init() {
     elevationInfo: { mode: "relative-to-ground", offset: 5 },
   });
 
+  const reportLayer = new GraphicsLayer({
+    title: "報告仮ピン",
+    elevationInfo: { mode: "relative-to-ground", offset: 5 },
+  });
+
   const map = new Map({
     basemap: "arcgis/topographic",
     ground: "world-elevation",
-    layers: [snakeLayer, userLayer],
+    layers: [snakeLayer, reportLayer, userLayer],
   });
 
   const userCenter = new Point({ latitude: loc.lat, longitude: loc.lng });
@@ -310,7 +324,6 @@ async function init() {
     ui: { components: ["attribution"] },
   });
 
-  // Apply initial weather animation based on Open-Meteo data
   function weatherCodeToType(code) {
     if (code <= 1) return "sunny";
     if (code <= 3) return "cloudy";
@@ -350,15 +363,13 @@ async function init() {
     geometry: new Point({ latitude: loc.lat, longitude: loc.lng }),
     symbol: {
       type: "point-3d",
-      symbolLayers: [
-        {
-          type: "icon",
-          size: 18,
-          resource: { primitive: "circle" },
-          material: { color: [30, 120, 255, 0.9] },
-          outline: { color: [255, 255, 255], size: 3 },
-        },
-      ],
+      symbolLayers: [{
+        type: "icon",
+        size: 18,
+        resource: { primitive: "circle" },
+        material: { color: [30, 120, 255, 0.9] },
+        outline: { color: [255, 255, 255], size: 3 },
+      }],
     },
     attributes: { label: "現在地" },
     popupTemplate: { title: "現在地", content: `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` },
@@ -403,67 +414,158 @@ async function init() {
     console.error("3D建物レイヤー読み込みエラー:", e);
   }
 
-  // 4. Snake pins (from Google Spreadsheet)
-  try {
-    const csvText = await fetchSnakeCSV();
-    const records = parseSnakeCSV(csvText);
+  // =============================================
+  // 4. Snake pins (from Google Form response sheet)
+  // =============================================
 
-    const popupTpl = new PopupTemplate({
-      title: "{place}",
-      content: [
-        {
-          type: "fields",
-          fieldInfos: [
-            { fieldName: "date", label: "日付" },
-            { fieldName: "time", label: "時間" },
-            { fieldName: "place", label: "場所" },
-            { fieldName: "species", label: "種類" },
-            { fieldName: "situation", label: "状況" },
-          ],
-        },
+  const snakePopupTpl = new PopupTemplate({
+    title: "{place}",
+    content: [{
+      type: "fields",
+      fieldInfos: [
+        { fieldName: "date", label: "日付" },
+        { fieldName: "time", label: "時間" },
+        { fieldName: "place", label: "場所" },
+        { fieldName: "species", label: "種類" },
+        { fieldName: "situation", label: "状況" },
       ],
-    });
+    }],
+  });
 
-    for (const r of records) {
-      const graphic = new Graphic({
-        geometry: new Point({ latitude: r._lat, longitude: r._lng }),
-        symbol: {
-          type: "point-3d",
-          symbolLayers: [
-            {
+  function updateTimestamp() {
+    const now = new Date();
+    $snakeUpdated.textContent = `最終取得: ${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,"0")}/${now.getDate().toString().padStart(2,"0")} ${now.getHours()}:${now.getMinutes().toString().padStart(2,"0")}`;
+    $snakeUpdated.style.fontSize = "11px";
+    $snakeUpdated.style.color = "#888";
+  }
+
+  async function loadSnakeData() {
+    snakeLayer.removeAll();
+    try {
+      const csvText = await fetchSnakeCSV();
+      const records = parseSnakeCSV(csvText);
+
+      for (const r of records) {
+        snakeLayer.add(new Graphic({
+          geometry: new Point({ latitude: r._lat, longitude: r._lng }),
+          symbol: {
+            type: "point-3d",
+            symbolLayers: [{
               type: "icon",
               size: 16,
               resource: { primitive: "circle" },
               material: { color: [220, 40, 40, 0.9] },
               outline: { color: [255, 255, 255], size: 2 },
-            },
-          ],
-        },
-        attributes: {
-          date: r.date,
-          time: r.time,
-          place: r.place,
-          species: r.species,
-          situation: r.situation,
-        },
-        popupTemplate: popupTpl,
-      });
-      snakeLayer.add(graphic);
-    }
+            }],
+          },
+          attributes: {
+            date: r.date,
+            time: r.time,
+            place: r.place,
+            species: r.species,
+            situation: r.situation,
+          },
+          popupTemplate: snakePopupTpl,
+        }));
+      }
 
-    $snakeCount.textContent = `ヘビ出現データ: ${records.length} 件`;
-    updateInfoSummary();
-    const now = new Date();
-    $snakeUpdated.textContent = `最終取得: ${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,"0")}/${now.getDate().toString().padStart(2,"0")} ${now.getHours()}:${now.getMinutes().toString().padStart(2,"0")}`;
-    $snakeUpdated.style.fontSize = "11px";
-    $snakeUpdated.style.color = "#888";
-  } catch (e) {
-    console.error("ヘビCSV読み込みエラー:", e);
-    $snakeCount.textContent = "ヘビデータ: 読み込み失敗";
+      $snakeCount.textContent = `ヘビ出現データ: ${records.length} 件`;
+      updateInfoSummary();
+      updateTimestamp();
+    } catch (e) {
+      console.error("ヘビCSV読み込みエラー:", e);
+      $snakeCount.textContent = "ヘビデータ: 読み込み失敗";
+    }
   }
 
+  await loadSnakeData();
+
+  // Reload button
+  document.getElementById("btn-reload-data").addEventListener("click", async () => {
+    $snakeCount.textContent = "再読み込み中…";
+    await loadSnakeData();
+    notify("ヘビデータを再読み込みしました");
+  });
+
   // =============================================
-  // 5. Mode control (Realtime / Preview)
+  // 5. Report mode (目撃情報を報告)
+  // =============================================
+
+  const $btnReport = document.getElementById("btn-report");
+  const $reportBanner = document.getElementById("report-banner");
+  const $reportConfirm = document.getElementById("report-confirm");
+  const $reportCoords = document.getElementById("report-coords");
+  let reportMode = false;
+  let reportClickHandler = null;
+  let reportCoords = null;
+
+  function enterReportMode() {
+    reportMode = true;
+    $btnReport.style.display = "none";
+    $reportBanner.classList.remove("hidden");
+    $reportConfirm.classList.add("hidden");
+    reportLayer.removeAll();
+    view.popup.close();
+
+    reportClickHandler = view.on("click", (event) => {
+      event.stopPropagation();
+      const mapPoint = event.mapPoint;
+      if (!mapPoint) return;
+
+      reportCoords = { lat: mapPoint.latitude, lng: mapPoint.longitude };
+      reportLayer.removeAll();
+      reportLayer.add(new Graphic({
+        geometry: new Point({ latitude: reportCoords.lat, longitude: reportCoords.lng }),
+        symbol: {
+          type: "point-3d",
+          symbolLayers: [{
+            type: "icon",
+            size: 20,
+            resource: { primitive: "circle" },
+            material: { color: [37, 99, 235, 0.9] },
+            outline: { color: [255, 255, 255], size: 3 },
+          }],
+        },
+      }));
+
+      $reportCoords.textContent = `緯度: ${reportCoords.lat.toFixed(6)}, 経度: ${reportCoords.lng.toFixed(6)}`;
+      $reportConfirm.classList.remove("hidden");
+    });
+  }
+
+  function exitReportMode() {
+    reportMode = false;
+    $btnReport.style.display = "";
+    $reportBanner.classList.add("hidden");
+    $reportConfirm.classList.add("hidden");
+    reportLayer.removeAll();
+    reportCoords = null;
+    if (reportClickHandler) {
+      reportClickHandler.remove();
+      reportClickHandler = null;
+    }
+  }
+
+  $btnReport.addEventListener("click", enterReportMode);
+  document.getElementById("report-cancel").addEventListener("click", exitReportMode);
+  document.getElementById("report-back").addEventListener("click", () => {
+    $reportConfirm.classList.add("hidden");
+    reportLayer.removeAll();
+    reportCoords = null;
+  });
+
+  document.getElementById("report-submit").addEventListener("click", () => {
+    if (!reportCoords) return;
+    const lat = encodeURIComponent(reportCoords.lat.toFixed(6));
+    const lng = encodeURIComponent(reportCoords.lng.toFixed(6));
+    const url = `${REPORT_FORM_BASE}&entry.1411652182=${lat}&entry.410305265=${lng}`;
+    window.open(url, "_blank");
+    exitReportMode();
+    notify("報告ありがとうございます。反映には時間がかかる場合があります。");
+  });
+
+  // =============================================
+  // 6. Mode control (Realtime / Preview)
   // =============================================
 
   const $modeStatus = document.getElementById("mode-status");
@@ -503,14 +605,12 @@ async function init() {
     $previewPanel.classList.add("minimized");
   });
 
-  // Reopen preview body when tab is clicked while minimized
   document.querySelectorAll(".preview-tab").forEach((tab) => {
     tab.addEventListener("click", () => {
       $previewPanel.classList.remove("minimized");
     });
   });
 
-  // Position mode-toggle and preview-panel dynamically below info-panel
   function positionModeUI() {
     const infoPanel = document.getElementById("info-panel");
     const modeToggle = document.getElementById("mode-toggle");
@@ -526,7 +626,6 @@ async function init() {
 
   $modeStatus.textContent = "モード: リアルタイム";
 
-  // --- Throttle helper ---
   function throttle(fn, ms) {
     let last = 0;
     return (...args) => {
@@ -535,7 +634,6 @@ async function init() {
     };
   }
 
-  // --- JST date builder ---
   function buildJSTDate(dateStr, minutes) {
     const [y, m, d] = dateStr.split("-").map(Number);
     const h = Math.floor(minutes / 60);
@@ -553,10 +651,7 @@ async function init() {
 
   function todayStr() {
     const n = new Date();
-    const y = n.getFullYear();
-    const m = (n.getMonth() + 1).toString().padStart(2, "0");
-    const d = n.getDate().toString().padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    return `${n.getFullYear()}-${(n.getMonth() + 1).toString().padStart(2, "0")}-${n.getDate().toString().padStart(2, "0")}`;
   }
 
   function nowMinutes() {
@@ -564,16 +659,13 @@ async function init() {
     return n.getHours() * 60 + n.getMinutes();
   }
 
-  // --- Preview state ---
   let pvWeatherType = "sunny";
   let pvCloudCover = 30;
 
   function shouldShadowPreview() {
-    if (pvWeatherType !== "sunny" && pvCloudCover >= 70) return false;
-    return true;
+    return !(pvWeatherType !== "sunny" && pvCloudCover >= 70);
   }
 
-  // --- Apply preview environment ---
   const applyPreviewEnv = throttle(() => {
     const minutes = parseInt($pvTimeSlider.value);
     const dateStr = $pvDatePicker.value;
@@ -593,7 +685,6 @@ async function init() {
     $weather.textContent = `天気: ${wLabels[pvWeatherType]}　雲量: ${pvCloudCover}%`;
   }, 30);
 
-  // --- Preview tab switching ---
   previewTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       previewTabs.forEach((t) => t.classList.remove("active"));
@@ -603,13 +694,9 @@ async function init() {
     });
   });
 
-  // --- Time slider ---
   $pvTimeSlider.addEventListener("input", applyPreviewEnv);
-
-  // --- Date picker ---
   $pvDatePicker.addEventListener("change", applyPreviewEnv);
 
-  // --- Play button ---
   function stopPlay() {
     if (playAnimId !== null) {
       cancelAnimationFrame(playAnimId);
@@ -634,7 +721,7 @@ async function init() {
       if (!lastTs) lastTs = ts;
       const dt = ts - lastTs;
       lastTs = ts;
-      val += dt * 0.15; // ~160 sec for full day
+      val += dt * 0.15;
       if (val >= 1440) {
         val = 1440;
         $pvTimeSlider.value = val;
@@ -649,7 +736,6 @@ async function init() {
     playAnimId = requestAnimationFrame(step);
   });
 
-  // --- Weather buttons ---
   weatherBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
       weatherBtns.forEach((b) => b.classList.remove("active"));
@@ -659,14 +745,12 @@ async function init() {
     });
   });
 
-  // --- Cloud slider ---
   $pvCloudSlider.addEventListener("input", () => {
     pvCloudCover = parseInt($pvCloudSlider.value);
     $pvCloudDisplay.textContent = pvCloudCover + "%";
     applyPreviewEnv();
   });
 
-  // --- Mode switching ---
   function activateRealtime() {
     currentMode = "realtime";
     $modeRealtime.classList.add("active");
@@ -674,7 +758,6 @@ async function init() {
     $previewPanel.classList.add("hidden");
     stopPlay();
 
-    // Re-fetch weather and reset to "now"
     $modeStatus.textContent = "モード: リアルタイム";
     (async () => {
       try {
@@ -702,19 +785,12 @@ async function init() {
     $previewPanel.classList.remove("minimized");
     positionModeUI();
 
-    // Initialize with current values
     $pvDatePicker.value = todayStr();
     const mins = nowMinutes();
     $pvTimeSlider.value = mins;
     $pvTimeDisplay.textContent = formatTime(mins);
 
-    // Map current weather to preview weather type
-    pvWeatherType = "sunny";
-    if (weather.weatherCode > 3 && weather.weatherCode <= 49) pvWeatherType = "foggy";
-    else if (weather.weatherCode > 49 && weather.weatherCode <= 69) pvWeatherType = "rainy";
-    else if (weather.weatherCode > 69 && weather.weatherCode <= 79) pvWeatherType = "snowy";
-    else if (weather.weatherCode > 1 && weather.weatherCode <= 3) pvWeatherType = "cloudy";
-
+    pvWeatherType = weatherCodeToType(weather.weatherCode);
     weatherBtns.forEach((b) => {
       b.classList.toggle("active", b.dataset.weather === pvWeatherType);
     });
@@ -729,7 +805,6 @@ async function init() {
   $modeRealtime.addEventListener("click", activateRealtime);
   $modePreview.addEventListener("click", activatePreview);
 
-  // Position UI after view loads
   view.when(() => positionModeUI());
   window.addEventListener("resize", positionModeUI);
 }
