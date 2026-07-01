@@ -4,20 +4,25 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ヘビ日陰マップ</title>
-  <meta name="theme-color" content="#2563eb" />
+  <meta name="theme-color" content="#2BC5D4" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="ヘビ日陰マップ" />
-  <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
   <div id="viewDiv"></div>
 
+  <!-- 右上情報パネル（折りたたみ可） -->
   <div id="info-panel" class="collapsed">
     <div id="info-header">
       <span id="info-summary">ヘビ日陰マップ</span>
+      <span id="info-header-meta">
+        <span id="info-date-badge"></span>
+        <span id="info-weather-badge">⏳</span>
+      </span>
       <button id="info-toggle" title="開く/閉じる">
         <svg id="info-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
       </button>
@@ -32,6 +37,24 @@
       <button id="btn-reload-data" title="データを再取得">🔄 データ再読み込み</button>
     </div>
   </div>
+
+  <!-- 目撃情報サイドパネル（デスクトップ：左固定 / モバイル：下ドロワー） -->
+  <div id="sightings-panel">
+    <div id="sightings-panel-header">
+      <span id="sightings-title">📍 最近の目撃情報</span>
+      <button id="sightings-close" title="閉じる">✕</button>
+    </div>
+    <div id="filter-buttons">
+      <button class="filter-btn active" data-filter="all">全期間</button>
+      <button class="filter-btn" data-filter="1m">1ヶ月</button>
+      <button class="filter-btn" data-filter="3m">3ヶ月</button>
+      <button class="filter-btn" data-filter="1y">1年</button>
+    </div>
+    <div id="sightings-list"><p class="no-sightings">読み込み中…</p></div>
+  </div>
+
+  <!-- モバイル：ドロワー開閉ボタン -->
+  <button id="btn-sightings-toggle" title="目撃情報リスト">📍 目撃リスト</button>
 
   <div id="toolbar">
     <button id="btn-locate" title="現在地に移動">
