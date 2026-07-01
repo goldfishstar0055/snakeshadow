@@ -11,9 +11,8 @@ const DEFAULT_LAT = 33.9737;
 const DEFAULT_LNG = 134.3601;
 
 // ヘビ出現データ（Googleフォーム回答シート）
-// /pub?output=csv は公開済みシート向けのエンドポイントでCORSに対応している
-const SNAKE_SHEET_BASE =
-  "https://docs.google.com/spreadsheets/d/1Hh4kp1sKAJzpksbhnSPkHvbaRR2sxmqtapPdEGd1Xsg/pub?output=csv&gid=1292865550";
+const CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6mD2OmSSaN6QD80j5O0XARw7tGiovprDrDcFDJXXrlmc_r7XoQKtZj81k_reh13G9epvqfvEQp14p/pub?gid=1292865550&single=true&output=csv";
 
 // Googleフォーム事前入力URL
 const REPORT_FORM_BASE =
@@ -240,7 +239,7 @@ function parseSnakeCSV(text) {
 // --- Fetch snake data ---
 
 async function fetchSnakeCSV() {
-  const res = await fetch(`${SNAKE_SHEET_BASE}&t=${Date.now()}`, { cache: "no-store" });
+  const res = await fetch(`${CSV_URL}&t=${Date.now()}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const text = await res.text();
   console.log("CSVヘッダー1行目:", text.split("\n")[0]);
