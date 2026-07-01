@@ -1,16 +1,9 @@
-import esriConfig from "@arcgis/core/config";
-import Map from "@arcgis/core/Map";
-import SceneView from "@arcgis/core/views/SceneView";
-import SceneLayer from "@arcgis/core/layers/SceneLayer";
-import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer";
-import Graphic from "@arcgis/core/Graphic";
-import Point from "@arcgis/core/geometry/Point";
-import PopupTemplate from "@arcgis/core/PopupTemplate";
+import Papa from "papaparse";
 
 const DEFAULT_LAT = 33.9737;
 const DEFAULT_LNG = 134.3601;
 
-// ヘビ出現データ（Googleフォーム回答シート）
+// ヘビ出現データ（Googleフォーム回答シート・公開済み）
 const CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vR6mD2OmSSaN6QD80j5O0XARw7tGiovprDrDcFDJXXrlmc_r7XoQKtZj81k_reh13G9epvqfvEQp14p/pub?gid=1292865550&single=true&output=csv";
 
@@ -35,10 +28,7 @@ function notify(msg) {
 
 async function getLocation() {
   return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      resolve(null);
-      return;
-    }
+    if (!navigator.geolocation) { resolve(null); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => resolve(null),
@@ -53,10 +43,7 @@ async function getWeather(lat, lng) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=cloud_cover,weather_code&timezone=Asia/Tokyo`;
   const res = await fetch(url);
   const data = await res.json();
-  return {
-    cloudCover: data.current.cloud_cover,
-    weatherCode: data.current.weather_code,
-  };
+  return { cloudCover: data.current.cloud_cover, weatherCode: data.current.weather_code };
 }
 
 function weatherCodeLabel(code) {
@@ -73,51 +60,16 @@ function isOvercast(cloudCover, weatherCode) {
   return cloudCover >= 70 || (weatherCode > 3 && weatherCode !== undefined);
 }
 
-// --- CSV parsing (引用符対応) ---
-
-function splitCSVLine(line) {
-  const fields = [];
-  let cur = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else if (ch === '"') {
-        inQuotes = false;
-      } else {
-        cur += ch;
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ",") {
-        fields.push(cur);
-        cur = "";
-      } else {
-        cur += ch;
-      }
-    }
-  }
-  fields.push(cur);
-  return fields;
-}
-
 // --- 座標の正規化 ---
 
 function toHalfWidth(s) {
-  return s.replace(/[０-９．]/g, (ch) =>
-    String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
-  );
+  return s.replace(/[０-９．]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
 }
 
 function parseCoord(raw) {
   if (!raw) return NaN;
   let s = toHalfWidth(raw.trim());
   if (s === "" || s === "不明") return NaN;
-
   const dms = s.match(/^(\d+(?:\.\d+)?)\s*[°度]\s*(\d+(?:\.\d+)?)\s*['''′]\s*(\d+(?:\.\d+)?)?/);
   if (dms) {
     const d = parseFloat(dms[1]);
@@ -125,14 +77,23 @@ function parseCoord(raw) {
     const sec = dms[3] ? parseFloat(dms[3]) : 0;
     return d + m / 60 + sec / 3600;
   }
-
   return parseFloat(s);
 }
 
 function isValidLat(v) { return v >= 20 && v <= 46; }
 function isValidLng(v) { return v >= 122 && v <= 154; }
 
-// --- Spreadsheet CSV parsing (部分一致ヘッダー検出) ---
+// --- CSV ヘッダー正規化（引用符・改行・括弧以降を除去） ---
+
+function normalizeHeader(f) {
+  return f
+    .replace(/"/g, "")
+    .replace(/[\r\n]/g, "")
+    .replace(/[（(].*/, "")
+    .trim();
+}
+
+// --- Spreadsheet CSV parsing (PapaParse + 部分一致ヘッダー検出) ---
 
 const HEADER_KEYWORDS = {
   lat: "緯度",
@@ -144,20 +105,15 @@ const HEADER_KEYWORDS = {
   species: "種類",
 };
 
-const SKIP_KEYWORDS = ["メール", "タイムスタンプ"];
-
-function findHeaderRow(lines) {
-  for (let i = 0; i < Math.min(lines.length, 10); i++) {
-    const fields = splitCSVLine(lines[i]);
+// rows: string[][] （PapaParse の result.data）
+function findHeaderRow(rows) {
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const fields = rows[i].map(normalizeHeader);
     const hasLat = fields.some((f) => f.includes("緯度"));
     const hasLng = fields.some((f) => f.includes("経度"));
-    if (hasLat && hasLng) {
-      return { index: i, fields: fields.map((f) => f.trim()) };
-    }
-    const lower = fields.map((f) => f.trim().toLowerCase());
-    if (lower.includes("lat") && lower.includes("lng")) {
-      return { index: i, fields: fields.map((f) => f.trim()) };
-    }
+    if (hasLat && hasLng) return { index: i, fields };
+    const lower = fields.map((f) => f.toLowerCase());
+    if (lower.includes("lat") && lower.includes("lng")) return { index: i, fields };
   }
   return null;
 }
@@ -168,7 +124,6 @@ function buildColumnMap(headerFields) {
     const idx = headerFields.findIndex((f) => f.includes(keyword));
     if (idx !== -1) colMap[key] = idx;
   }
-  // Fallback: exact match for English headers (local CSV)
   if (colMap.lat === undefined) {
     const lower = headerFields.map((f) => f.toLowerCase());
     if (lower.includes("lat")) colMap.lat = lower.indexOf("lat");
@@ -183,17 +138,19 @@ function buildColumnMap(headerFields) {
 }
 
 function parseSnakeCSV(text) {
-  const clean = text.replace(/^﻿/, "");
-  const lines = clean.trim().split(/\r?\n/);
-  const header = findHeaderRow(lines);
+  const result = Papa.parse(text, { header: false, skipEmptyLines: true });
+  const rows = result.data;
+
+  const header = findHeaderRow(rows);
   if (!header) {
     console.warn("ヘビCSV: ヘッダー行（緯度/経度）が見つかりません");
+    console.warn("先頭行:", rows[0]);
     return [];
   }
 
   const colMap = buildColumnMap(header.fields);
   if (colMap.lat === undefined || colMap.lng === undefined) {
-    console.warn("ヘビCSV: 緯度/経度の列が特定できません");
+    console.warn("ヘビCSV: 緯度/経度の列が特定できません", header.fields);
     return [];
   }
 
@@ -201,34 +158,28 @@ function parseSnakeCSV(text) {
   let totalRows = 0;
   let skipped = 0;
 
-  for (let i = header.index + 1; i < lines.length; i++) {
-    const fields = splitCSVLine(lines[i]);
-    if (fields.every((f) => f.trim() === "")) continue;
+  for (let i = header.index + 1; i < rows.length; i++) {
+    const fields = rows[i];
+    if (fields.every((f) => String(f).trim() === "")) continue;
     totalRows++;
 
-    const rawLat = fields[colMap.lat]?.trim() ?? "";
-    const rawLng = fields[colMap.lng]?.trim() ?? "";
+    const rawLat = String(fields[colMap.lat] ?? "").trim();
+    const rawLng = String(fields[colMap.lng] ?? "").trim();
     const lat = parseCoord(rawLat);
     const lng = parseCoord(rawLng);
 
     if (isNaN(lat) || isNaN(lng)) { skipped++; continue; }
-    if (!isValidLat(lat)) {
-      console.warn(`行${i + 1}: 緯度が範囲外 (${lat})、スキップ`);
-      skipped++; continue;
-    }
-    if (!isValidLng(lng)) {
-      console.warn(`行${i + 1}: 経度が範囲外 (${lng})、スキップ`);
-      skipped++; continue;
-    }
+    if (!isValidLat(lat)) { console.warn(`行${i + 1}: 緯度が範囲外 (${lat})`); skipped++; continue; }
+    if (!isValidLng(lng)) { console.warn(`行${i + 1}: 経度が範囲外 (${lng})`); skipped++; continue; }
 
     records.push({
       _lat: lat,
       _lng: lng,
-      date: colMap.date !== undefined ? (fields[colMap.date]?.trim() ?? "") : "",
-      time: colMap.time !== undefined ? (fields[colMap.time]?.trim() ?? "") : "",
-      place: colMap.place !== undefined ? (fields[colMap.place]?.trim() ?? "") : "",
-      situation: colMap.situation !== undefined ? (fields[colMap.situation]?.trim() ?? "") : "",
-      species: colMap.species !== undefined ? (fields[colMap.species]?.trim() || "不明") : "不明",
+      date: colMap.date !== undefined ? String(fields[colMap.date] ?? "").trim() : "",
+      time: colMap.time !== undefined ? String(fields[colMap.time] ?? "").trim() : "",
+      place: colMap.place !== undefined ? String(fields[colMap.place] ?? "").trim() : "",
+      situation: colMap.situation !== undefined ? String(fields[colMap.situation] ?? "").trim() : "",
+      species: colMap.species !== undefined ? (String(fields[colMap.species] ?? "").trim() || "不明") : "不明",
     });
   }
 
@@ -247,8 +198,31 @@ async function fetchSnakeCSV() {
 }
 
 // --- Init ---
+// ArcGIS の import はすべてここで動的に行う。
+// トップレベルの static import にすると Rollup のチャンク分割後に
+// 初期化順序が乱れ "Cannot access 'X' before initialization" (TDZ) が発生するため。
 
 async function init() {
+  const [
+    { default: esriConfig },
+    { default: Map },
+    { default: SceneView },
+    { default: SceneLayer },
+    { default: GraphicsLayer },
+    { default: Graphic },
+    { default: Point },
+    { default: PopupTemplate },
+  ] = await Promise.all([
+    import("@arcgis/core/config"),
+    import("@arcgis/core/Map"),
+    import("@arcgis/core/views/SceneView"),
+    import("@arcgis/core/layers/SceneLayer"),
+    import("@arcgis/core/layers/GraphicsLayer"),
+    import("@arcgis/core/Graphic"),
+    import("@arcgis/core/geometry/Point"),
+    import("@arcgis/core/PopupTemplate"),
+  ]);
+
   esriConfig.apiKey = import.meta.env.VITE_ARCGIS_API_KEY;
 
   // 1. Location
@@ -297,6 +271,15 @@ async function init() {
 
   const userCenter = new Point({ latitude: loc.lat, longitude: loc.lng });
 
+  function weatherCodeToType(code) {
+    if (code <= 1) return "sunny";
+    if (code <= 3) return "cloudy";
+    if (code <= 49) return "foggy";
+    if (code <= 69) return "rainy";
+    if (code <= 79) return "snowy";
+    return "rainy";
+  }
+
   const view = new SceneView({
     container: "viewDiv",
     map,
@@ -316,15 +299,6 @@ async function init() {
     popup: { defaultPopupTemplateEnabled: false },
     ui: { components: ["attribution"] },
   });
-
-  function weatherCodeToType(code) {
-    if (code <= 1) return "sunny";
-    if (code <= 3) return "cloudy";
-    if (code <= 49) return "foggy";
-    if (code <= 69) return "rainy";
-    if (code <= 79) return "snowy";
-    return "rainy";
-  }
 
   view.environment.weather = {
     type: weatherCodeToType(weather.weatherCode),
@@ -488,12 +462,10 @@ async function init() {
   const $reportBanner = document.getElementById("report-banner");
   const $reportConfirm = document.getElementById("report-confirm");
   const $reportCoords = document.getElementById("report-coords");
-  let reportMode = false;
   let reportClickHandler = null;
   let reportCoords = null;
 
   function enterReportMode() {
-    reportMode = true;
     $btnReport.style.display = "none";
     $reportBanner.classList.remove("hidden");
     $reportConfirm.classList.add("hidden");
@@ -527,7 +499,6 @@ async function init() {
   }
 
   function exitReportMode() {
-    reportMode = false;
     $btnReport.style.display = "";
     $reportBanner.classList.add("hidden");
     $reportConfirm.classList.add("hidden");
@@ -574,7 +545,6 @@ async function init() {
   const previewTabs = document.querySelectorAll(".preview-tab");
   const weatherBtns = document.querySelectorAll(".weather-btn");
 
-  let currentMode = "realtime";
   let playAnimId = null;
 
   // --- Info panel collapse/expand ---
@@ -631,8 +601,7 @@ async function init() {
     const [y, m, d] = dateStr.split("-").map(Number);
     const h = Math.floor(minutes / 60);
     const min = Math.round(minutes % 60);
-    const jstOffset = 9 * 60;
-    const utc = Date.UTC(y, m - 1, d, h, min, 0) - jstOffset * 60000;
+    const utc = Date.UTC(y, m - 1, d, h, min, 0) - 9 * 60 * 60000;
     return new Date(utc);
   }
 
@@ -700,10 +669,7 @@ async function init() {
   }
 
   $pvPlay.addEventListener("click", () => {
-    if (playAnimId !== null) {
-      stopPlay();
-      return;
-    }
+    if (playAnimId !== null) { stopPlay(); return; }
     $pvPlay.textContent = "■";
     $pvPlay.classList.add("playing");
     let val = parseInt($pvTimeSlider.value);
@@ -745,7 +711,6 @@ async function init() {
   });
 
   function activateRealtime() {
-    currentMode = "realtime";
     $modeRealtime.classList.add("active");
     $modePreview.classList.remove("active");
     $previewPanel.classList.add("hidden");
@@ -771,7 +736,6 @@ async function init() {
   }
 
   function activatePreview() {
-    currentMode = "preview";
     $modePreview.classList.add("active");
     $modeRealtime.classList.remove("active");
     $previewPanel.classList.remove("hidden");
