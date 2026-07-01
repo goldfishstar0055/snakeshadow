@@ -11,10 +11,9 @@ const DEFAULT_LAT = 33.9737;
 const DEFAULT_LNG = 134.3601;
 
 // ヘビ出現データ（Googleフォーム回答シート）
-// gid=0 はスプレッドシートの最初のシート。フォーム回答シートが別シートの場合は gid を変更してください。
+// /pub?output=csv は公開済みシート向けのエンドポイントでCORSに対応している
 const SNAKE_SHEET_BASE =
-  "https://docs.google.com/spreadsheets/d/1Hh4kp1sKAJzpksbhnSPkHvbaRR2sxmqtapPdEGd1Xsg/export?format=csv&gid=1292865550";
-const SNAKE_LOCAL_URL = import.meta.env.BASE_URL + "data/snakes.csv";
+  "https://docs.google.com/spreadsheets/d/1Hh4kp1sKAJzpksbhnSPkHvbaRR2sxmqtapPdEGd1Xsg/pub?output=csv&gid=1292865550";
 
 // Googleフォーム事前入力URL
 const REPORT_FORM_BASE =
@@ -32,8 +31,6 @@ function notify(msg) {
   $notification.classList.remove("hidden");
   setTimeout(() => $notification.classList.add("hidden"), 6000);
 }
-
-esriConfig.apiKey = import.meta.env.VITE_ARCGIS_API_KEY;
 
 // --- Location ---
 
@@ -243,24 +240,18 @@ function parseSnakeCSV(text) {
 // --- Fetch snake data ---
 
 async function fetchSnakeCSV() {
-  try {
-    const res = await fetch(`${SNAKE_SHEET_BASE}&t=${Date.now()}`, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    console.log("CSVヘッダー1行目:", text.split("\n")[0]);
-    return text;
-  } catch (e) {
-    console.warn("Googleスプレッドシートからの取得失敗（CORSエラーの可能性あり）:", e.message);
-    console.log("フォールバック: ローカルCSVを読み込みます");
-    const res = await fetch(SNAKE_LOCAL_URL);
-    if (!res.ok) throw new Error(`ローカルCSVも取得失敗: HTTP ${res.status}`);
-    return await res.text();
-  }
+  const res = await fetch(`${SNAKE_SHEET_BASE}&t=${Date.now()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  console.log("CSVヘッダー1行目:", text.split("\n")[0]);
+  return text;
 }
 
 // --- Init ---
 
 async function init() {
+  esriConfig.apiKey = import.meta.env.VITE_ARCGIS_API_KEY;
+
   // 1. Location
   let loc = await getLocation();
   let usingDefault = false;
@@ -477,7 +468,7 @@ async function init() {
       updateTimestamp();
     } catch (e) {
       console.error("ヘビCSV読み込みエラー:", e);
-      $snakeCount.textContent = "ヘビデータ: 読み込み失敗";
+      $snakeCount.textContent = "ヘビデータの取得に失敗しました。ネットワークを確認してください。";
     }
   }
 
