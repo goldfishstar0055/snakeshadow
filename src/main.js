@@ -13,7 +13,7 @@ const DEFAULT_LNG = 134.3601;
 // ヘビ出現データ（Googleフォーム回答シート）
 // gid=0 はスプレッドシートの最初のシート。フォーム回答シートが別シートの場合は gid を変更してください。
 const SNAKE_SHEET_BASE =
-  "https://docs.google.com/spreadsheets/d/1Hh4kp1sKAJzpksbhnSPkHvbaRR2sxmqtapPdEGd1Xsg/export?format=csv&gid=0";
+  "https://docs.google.com/spreadsheets/d/1Hh4kp1sKAJzpksbhnSPkHvbaRR2sxmqtapPdEGd1Xsg/export?format=csv&gid=1292865550";
 const SNAKE_LOCAL_URL = import.meta.env.BASE_URL + "data/snakes.csv";
 
 // Googleフォーム事前入力URL
