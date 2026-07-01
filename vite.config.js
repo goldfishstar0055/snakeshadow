@@ -10,7 +10,15 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg}"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallback: null,
-        runtimeCaching: [],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) =>
+              url.hostname === "docs.google.com" ||
+              url.hostname === "api.open-meteo.com" ||
+              url.hostname.endsWith("arcgis.com"),
+            handler: "NetworkOnly",
+          },
+        ],
       },
       manifest: {
         name: "ヘビ日陰マップ",
